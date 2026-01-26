@@ -15,11 +15,15 @@ mkdir -p "$CONFIG_DIR"
 if [ -f "$TEMPLATE_FILE" ]; then
     cp "$TEMPLATE_FILE" "$CONFIG_FILE"
 else
-    # Create minimal config if template doesn't exist
+    # Create minimal config if template doesn't exist (new config format)
     cat > "$CONFIG_FILE" << 'EOFCONFIG'
 {
-  "agent": {
-    "model": "anthropic/claude-sonnet-4-20250514"
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-20250514"
+      }
+    }
   },
   "gateway": {
     "bind": "0.0.0.0",
@@ -29,12 +33,9 @@ else
 EOFCONFIG
 fi
 
-# Use jq to update config with environment variables if available
-# We'll use Node.js for JSON manipulation since jq might not be available
-
+# Use Node.js for JSON manipulation since jq might not be available
 node << 'EOFNODE'
 const fs = require('fs');
-const path = require('path');
 
 const configPath = '/root/.clawdbot/clawdbot.json';
 let config = {};
@@ -45,11 +46,13 @@ try {
     console.log('Starting with empty config');
 }
 
-// Ensure nested objects exist
+// Ensure nested objects exist (new config format)
+config.agents = config.agents || {};
+config.agents.defaults = config.agents.defaults || {};
+config.agents.defaults.model = config.agents.defaults.model || {};
 config.gateway = config.gateway || {};
 config.gateway.auth = config.gateway.auth || {};
 config.channels = config.channels || {};
-config.agent = config.agent || {};
 
 // Gateway configuration
 config.gateway.bind = '0.0.0.0';
@@ -61,9 +64,9 @@ if (process.env.CLAWDBOT_GATEWAY_TOKEN) {
     config.gateway.auth.token = process.env.CLAWDBOT_GATEWAY_TOKEN;
 }
 
-// Anthropic API key
+// Anthropic API key - set in agents.defaults
 if (process.env.ANTHROPIC_API_KEY) {
-    config.agent.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+    config.agents.defaults.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
 }
 
 // Telegram configuration
@@ -72,7 +75,6 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
     config.channels.telegram.botToken = process.env.TELEGRAM_BOT_TOKEN;
     config.channels.telegram.enabled = true;
     
-    // Set DM policy to open for sandbox use (adjust as needed)
     config.channels.telegram.dm = config.channels.telegram.dm || {};
     config.channels.telegram.dm.policy = process.env.TELEGRAM_DM_POLICY || 'pairing';
 }
@@ -95,9 +97,9 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
     config.channels.slack.enabled = true;
 }
 
-// OpenAI API key (for alternative models)
+// OpenAI API key
 if (process.env.OPENAI_API_KEY) {
-    config.agent.openaiApiKey = process.env.OPENAI_API_KEY;
+    config.agents.defaults.openaiApiKey = process.env.OPENAI_API_KEY;
 }
 
 // Write updated config
